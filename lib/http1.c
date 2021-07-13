@@ -247,7 +247,13 @@ DECL_ENTITY_READ_SEND_ERROR_XXX(502)
 
 static void handle_one_body_fragment(struct st_h2o_http1_conn_t *conn, size_t fragment_size, size_t extra_bytes, int complete)
 {
+    if (fragment_size == 0 && !complete) {
+        h2o_buffer_consume(&conn->sock->input, extra_bytes);
+        return;
+    }
+
     clear_timeouts(conn);
+
     h2o_socket_read_stop(conn->sock);
     if (conn->req.write_req.cb(conn->req.write_req.ctx, h2o_iovec_init(conn->sock->input->bytes, fragment_size), complete) != 0) {
         entity_read_send_error_502(conn, "Bad Gateway", "Bad Gateway");
@@ -650,7 +656,8 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             h2o_socket_read_stop(conn->sock);
             process_request(conn);
         }
-    } return;
+    }
+        return;
     case -2: // incomplete
         if (inreqlen == H2O_MAX_REQLEN) {
             send_bad_request(conn, "Bad Request");
@@ -1330,7 +1337,7 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
     sock->data = conn;
     h2o_linklist_insert(&ctx->ctx->http1._conns, &conn->_conns);
 
-    H2O_PROBE_CONN(H1_ACCEPT, &conn->super, conn->sock, &conn->super);
+    H2O_PROBE_CONN(H1_ACCEPT, &conn->super, conn->sock, &conn->super, h2o_conn_get_uuid(&conn->super));
 
     init_request(conn);
     reqread_start(conn);
